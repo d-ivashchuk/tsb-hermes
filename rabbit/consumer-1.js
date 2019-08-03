@@ -14,7 +14,7 @@ open
       return ch.consume(q, async function(msg) {
         if (msg !== null) {
           const twitterInfo = await twitterMethods.getUserInfo(
-            msg.content.toString()
+            JSON.parse(msg.content).twitterHandler
           );
           const {
             followers_count,
@@ -28,7 +28,8 @@ open
             friends_count,
             listed_count,
             favourites_count,
-            timestamp: Math.floor(Date.now() / 1000)
+            timestamp: Math.floor(Date.now() / 100),
+            userMongoId: JSON.parse(msg.content).userMongoId
           });
           ch.ack(msg);
         }
