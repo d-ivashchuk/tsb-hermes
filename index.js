@@ -9,5 +9,6 @@ app.listen(process.env.PORT, () => {
       process.env.PORT
     }`
   );
+  require("./db/db");
   require("./rabbit/consumer-1");
 });

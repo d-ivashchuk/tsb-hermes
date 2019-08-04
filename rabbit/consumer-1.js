@@ -1,5 +1,6 @@
 require("dotenv").config();
 const twitterMethods = require("../twitter/twitter");
+const DailyStats = require("../models/DailyStats");
 
 const q = "task";
 
@@ -22,14 +23,17 @@ open
             listed_count,
             favourites_count
           } = twitterInfo;
-
-          console.log({
-            followers_count,
-            friends_count,
-            listed_count,
-            favourites_count,
-            timestamp: Math.floor(Date.now() / 100),
-            userMongoId: JSON.parse(msg.content).userMongoId
+          const dailyStats = new DailyStats({
+            followersCount: followers_count,
+            friendsCount: friends_count,
+            listedCount: listed_count,
+            favoritesCount: favourites_count,
+            user: JSON.parse(msg.content).userMongoId
+          });
+          const result = await dailyStats.save((err, res) => {
+            if (err) {
+              console.log(err);
+            }
           });
           ch.ack(msg);
         }
