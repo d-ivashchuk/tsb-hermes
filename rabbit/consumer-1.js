@@ -1,43 +1,52 @@
 require("dotenv").config();
+const ampq = require("amqp-connection-manager");
 const twitterMethods = require("../twitter/twitter");
 const DailyStats = require("../models/DailyStats");
 
-const q = "task";
+const q = "jobs";
+const connection = ampq.connect([process.env.AMPQ_CONNECTION_STRING]);
+connection.on("connect", function() {
+  console.log("Connected!");
+});
+connection.on("disconnect", function(err) {
+  console.log("Disconnected.", err);
+});
 
-const open = require("amqplib").connect(process.env.AMPQ_CONNECTION_STRING);
+const onMessage = async function(data) {
+  const message = JSON.parse(data.content.toString());
+  const twitterInfo = await twitterMethods.getUserInfo(message.twitterHandler);
+  const {
+    followers_count,
+    friends_count,
+    listed_count,
+    favourites_count
+  } = twitterInfo;
+  const dailyStats = new DailyStats({
+    followersCount: followers_count,
+    friendsCount: friends_count,
+    listedCount: listed_count,
+    favoritesCount: favourites_count,
+    user: message.userMongoId
+  });
+  const result = await dailyStats.save((err, res) => {
+    if (res) {
+      channelWrapper.ack(data);
+    }
+    if (err) {
+      console.log(err);
+    }
+  });
+};
 
-open
-  .then(function(conn) {
-    return conn.createChannel();
-  })
-  .then(function(ch) {
-    return ch.assertQueue(q).then(function(ok) {
-      return ch.consume(q, async function(msg) {
-        if (msg !== null) {
-          const twitterInfo = await twitterMethods.getUserInfo(
-            JSON.parse(msg.content).twitterHandler
-          );
-          const {
-            followers_count,
-            friends_count,
-            listed_count,
-            favourites_count
-          } = twitterInfo;
-          const dailyStats = new DailyStats({
-            followersCount: followers_count,
-            friendsCount: friends_count,
-            listedCount: listed_count,
-            favoritesCount: favourites_count,
-            user: JSON.parse(msg.content).userMongoId
-          });
-          const result = await dailyStats.save((err, res) => {
-            if (err) {
-              console.log(err);
-            }
-          });
-          ch.ack(msg);
-        }
-      });
-    });
-  })
-  .catch(console.warn);
+const channelWrapper = connection.createChannel({
+  setup: function(channel) {
+    return Promise.all([
+      channel.assertQueue(q, { durable: true }),
+      channel.consume(q, onMessage)
+    ]);
+  }
+});
+
+channelWrapper.waitForConnect().then(function() {
+  console.log("Listening for messages");
+});
